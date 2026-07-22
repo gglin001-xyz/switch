@@ -865,7 +865,7 @@ struct PermissionsTabView: View {
 
                 permRow(
                     title: "Accessibility",
-                    detail: "Intercept ⌘-Tab and ⌥-` system-wide.",
+                    detail: "Intercept ⌘-Tab and ⌘-` system-wide.",
                     granted: perms.accessibility,
                     action: { perms.openAccessibility() }
                 )

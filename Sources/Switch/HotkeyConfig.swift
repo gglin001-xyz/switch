@@ -18,7 +18,7 @@ struct HotkeyBinding: Codable, Equatable {
 
     static let defaultCurrentApp = HotkeyBinding(
         keyCode: 50, // Backtick
-        modifiersRaw: CGEventFlags.maskAlternate.rawValue
+        modifiersRaw: CGEventFlags.maskCommand.rawValue
     )
 
     static let defaultSpaces = HotkeyBinding(

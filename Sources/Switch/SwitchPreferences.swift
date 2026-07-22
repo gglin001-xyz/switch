@@ -10,6 +10,14 @@ final class SwitchPreferences: ObservableObject {
     nonisolated static let defaultGridColumns = 4
     nonisolated static let defaultPickerActivationDelay = 130.0
     nonisolated static let compactThumbnailHeight = 72.0
+    nonisolated static let defaultShowTitleFirst = true
+    nonisolated static let defaultDisableAnimations = true
+    nonisolated static let defaultVerticalList = true
+    nonisolated static let defaultShowThumbnails = false
+    nonisolated static let defaultShowStoplights = false
+    nonisolated static let defaultVerticalShowStoplights = false
+    nonisolated static let defaultVerticalShowPreview = false
+    nonisolated static let defaultShowHintStrip = false
 
     enum AccentChoice: String, CaseIterable, Identifiable {
         case system, rose, blue, mint, peach, lavender, monochrome
@@ -213,12 +221,12 @@ final class SwitchPreferences: ObservableObject {
     private init() {
         accent = AccentChoice(rawValue: UserDefaults.standard.string(forKey: accentKey) ?? "") ?? .system
         backgroundBlur = BackgroundBlur(rawValue: UserDefaults.standard.string(forKey: backgroundBlurKey) ?? "") ?? .light
-        showTitleFirst = UserDefaults.standard.bool(forKey: showTitleFirstKey)
+        showTitleFirst = (UserDefaults.standard.object(forKey: showTitleFirstKey) as? Bool) ?? Self.defaultShowTitleFirst
         showCrossSpace = (UserDefaults.standard.object(forKey: crossSpaceKey) as? Bool) ?? true
         stickyMode = UserDefaults.standard.bool(forKey: SwitchPreferences.stickyModeKey)
         disableMouse = UserDefaults.standard.bool(forKey: SwitchPreferences.disableMouseKey)
-        disableAnimations = UserDefaults.standard.bool(forKey: disableAnimationsKey)
-        verticalList = UserDefaults.standard.bool(forKey: SwitchPreferences.verticalListKey)
+        disableAnimations = (UserDefaults.standard.object(forKey: disableAnimationsKey) as? Bool) ?? Self.defaultDisableAnimations
+        verticalList = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalListKey) as? Bool) ?? Self.defaultVerticalList
         blacklist = Set(UserDefaults.standard.stringArray(forKey: SwitchPreferences.blacklistKey) ?? [])
         mruMixSpaces = (UserDefaults.standard.object(forKey: "switch.mruMixSpaces") as? Bool) ?? true
         staticOrder = UserDefaults.standard.bool(forKey: SwitchPreferences.staticOrderKey)
@@ -228,12 +236,12 @@ final class SwitchPreferences: ObservableObject {
             forKey: SwitchPreferences.showHiddenAndMinimizedWindowsKey
         )
         hideMenuBarIcon = UserDefaults.standard.bool(forKey: SwitchPreferences.hideMenuBarIconKey)
-        showThumbnails = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? true
-        showStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.showStoplightsKey) as? Bool) ?? true
-        verticalShowStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowStoplightsKey) as? Bool) ?? true
-        verticalShowPreview = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool) ?? true
+        showThumbnails = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? Self.defaultShowThumbnails
+        showStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.showStoplightsKey) as? Bool) ?? Self.defaultShowStoplights
+        verticalShowStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowStoplightsKey) as? Bool) ?? Self.defaultVerticalShowStoplights
+        verticalShowPreview = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool) ?? Self.defaultVerticalShowPreview
         verticalShowHeader = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowHeaderKey) as? Bool) ?? true
-        showHintStrip = (UserDefaults.standard.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? true
+        showHintStrip = (UserDefaults.standard.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? Self.defaultShowHintStrip
         typeToFilter = (UserDefaults.standard.object(forKey: SwitchPreferences.typeToFilterKey) as? Bool) ?? true
         thumbnailHeight = (UserDefaults.standard.object(forKey: SwitchPreferences.thumbnailHeightKey) as? Double) ?? Self.defaultThumbnailHeight
         appIconSize = (UserDefaults.standard.object(forKey: SwitchPreferences.appIconSizeKey) as? Double) ?? Self.defaultAppIconSize

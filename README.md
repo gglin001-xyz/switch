@@ -36,7 +36,7 @@ Or quit Switch and drag `Switch.app` from `/Applications` to the Trash.
 ## Shortcuts
 
 - ⌘-Tab cycles all windows
-- ⌥-` cycles within the current app
+- ⌘-` cycles within the current app
 - type to filter inline
 - 1-9 (or numpad) picks a tile
 - ⌘W close window, ⌘Q quit app, ⌘H hide app

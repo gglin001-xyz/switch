@@ -24,7 +24,7 @@ struct OnboardingView: View {
             VStack(spacing: 8) {
                 row(
                     name: "Accessibility",
-                    detail: "Lets Switch intercept ⌘-Tab and ⌥-`.",
+                    detail: "Lets Switch intercept ⌘-Tab and ⌘-`.",
                     granted: model.accessibility,
                     open: model.openAccessibility
                 )

@@ -239,7 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var requiredPermissionsGranted: Bool {
-        let thumbnailsEnabled = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? true
+        let thumbnailsEnabled = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
+            ?? SwitchPreferences.defaultShowThumbnails
         let screenCaptureOK = !thumbnailsEnabled || CGPreflightScreenCaptureAccess()
         return AXIsProcessTrusted() && screenCaptureOK
     }
@@ -420,7 +421,8 @@ final class SwitcherWindow: NSPanel {
 private enum SwitcherPanelSize {
     static func current(mode: HotkeyManager.Mode, itemCount: Int, screen: NSScreen?) -> NSSize {
         let defaults = UserDefaults.standard
-        let isList = defaults.bool(forKey: SwitchPreferences.verticalListKey)
+        let isList = (defaults.object(forKey: SwitchPreferences.verticalListKey) as? Bool)
+            ?? SwitchPreferences.defaultVerticalList
         let thumb = CGFloat((defaults.object(forKey: SwitchPreferences.thumbnailHeightKey) as? Double) ?? SwitchPreferences.defaultThumbnailHeight)
         let scale = thumb / CGFloat(SwitchPreferences.defaultThumbnailHeight)
         let count = max(itemCount, 1)
@@ -441,9 +443,12 @@ private enum SwitcherPanelSize {
     }
 
     private static func listSize(defaults: UserDefaults, count: Int, scale: CGFloat) -> NSSize {
-        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? true
-        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? true
-        let showPreview = ((defaults.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool) ?? true) && showThumbs
+        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool)
+            ?? SwitchPreferences.defaultShowHintStrip
+        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
+            ?? SwitchPreferences.defaultShowThumbnails
+        let showPreview = ((defaults.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool)
+            ?? SwitchPreferences.defaultVerticalShowPreview) && showThumbs
         let hintHeight: CGFloat = showHints ? 38 : 0
         let rowHeight: CGFloat = showPreview ? 62 : 48
         let visibleRows = min(count, 8)
@@ -453,8 +458,10 @@ private enum SwitcherPanelSize {
     }
 
     private static func gridSize(defaults: UserDefaults, count: Int, thumb: CGFloat, scale: CGFloat) -> NSSize {
-        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? true
-        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? true
+        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool)
+            ?? SwitchPreferences.defaultShowHintStrip
+        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
+            ?? SwitchPreferences.defaultShowThumbnails
         let tileThumb: CGFloat = showThumbs ? thumb : SwitchPreferences.compactThumbnailHeight
         let configuredColumns = (defaults.object(forKey: SwitchPreferences.gridColumnsKey) as? Int) ?? SwitchPreferences.defaultGridColumns
         let columns = min(max(configuredColumns, 1), max(count, 3))
