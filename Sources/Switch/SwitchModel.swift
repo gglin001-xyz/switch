@@ -160,6 +160,10 @@ final class SwitchModel: ObservableObject {
         var cross = full.crossSpace
         active.removeAll { quitPIDs.contains($0.pid) }
         cross.removeAll { quitPIDs.contains($0.pid) }
+        if !SwitchPreferences.shared.showHiddenAndMinimizedWindows {
+            active.removeAll { $0.isHidden || $0.isMinimized }
+            cross.removeAll { $0.isHidden || $0.isMinimized }
+        }
         if mode == .currentApp, let f = armFrontmostPID {
             active = active.filter { $0.pid == f }
             cross = cross.filter { $0.pid == f }

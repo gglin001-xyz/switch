@@ -116,6 +116,15 @@ final class SwitchPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(includeWindowlessApps, forKey: SwitchPreferences.includeWindowlessKey) }
     }
 
+    @Published var showHiddenAndMinimizedWindows: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                showHiddenAndMinimizedWindows,
+                forKey: SwitchPreferences.showHiddenAndMinimizedWindowsKey
+            )
+        }
+    }
+
     @Published var hideMenuBarIcon: Bool {
         didSet { UserDefaults.standard.set(hideMenuBarIcon, forKey: SwitchPreferences.hideMenuBarIconKey) }
     }
@@ -185,6 +194,7 @@ final class SwitchPreferences: ObservableObject {
     nonisolated static let staticOrderKey = "switch.staticOrder"
     nonisolated static let appOrderKey = "switch.appOrder"
     nonisolated static let includeWindowlessKey = "switch.includeWindowlessApps"
+    nonisolated static let showHiddenAndMinimizedWindowsKey = "switch.showHiddenAndMinimizedWindows"
     nonisolated static let hideMenuBarIconKey = "switch.hideMenuBarIcon"
     nonisolated static let showThumbnailsKey = "switch.showThumbnails"
     nonisolated static let showStoplightsKey = "switch.showStoplights"
@@ -214,6 +224,9 @@ final class SwitchPreferences: ObservableObject {
         staticOrder = UserDefaults.standard.bool(forKey: SwitchPreferences.staticOrderKey)
         appOrder = UserDefaults.standard.stringArray(forKey: SwitchPreferences.appOrderKey) ?? []
         includeWindowlessApps = UserDefaults.standard.bool(forKey: SwitchPreferences.includeWindowlessKey)
+        showHiddenAndMinimizedWindows = UserDefaults.standard.bool(
+            forKey: SwitchPreferences.showHiddenAndMinimizedWindowsKey
+        )
         hideMenuBarIcon = UserDefaults.standard.bool(forKey: SwitchPreferences.hideMenuBarIconKey)
         showThumbnails = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? true
         showStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.showStoplightsKey) as? Bool) ?? true

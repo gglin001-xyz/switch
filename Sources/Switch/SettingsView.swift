@@ -277,6 +277,13 @@ struct SettingsView: View {
                                 .tint(prefs.accent.color)
                         }
                         Divider().opacity(0.4)
+                        row(title: "Show hidden and minimized windows",
+                            detail: "Include windows whose apps are hidden or whose windows are minimized.") {
+                            Toggle("", isOn: $prefs.showHiddenAndMinimizedWindows)
+                                .labelsHidden().toggleStyle(.switch)
+                                .tint(prefs.accent.color)
+                        }
+                        Divider().opacity(0.4)
                         row(title: "Show thumbnails",
                             detail: "Capture window previews. Turn off to run without Screen Recording.") {
                             Toggle("", isOn: $prefs.showThumbnails)
