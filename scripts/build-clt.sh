@@ -6,6 +6,8 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME=Switch
+LOCAL_APP_NAME="Switch Local"
+LOCAL_BUNDLE_ID=com.sanyamgarg.switch.local
 BUILD_ROOT="$PROJECT_DIR/build/clt"
 APP_PATH="$BUILD_ROOT/$APP_NAME.app"
 INTERMEDIATES="$BUILD_ROOT/intermediates"
@@ -63,7 +65,9 @@ echo "==> Compiling arm64 application"
 echo "==> Packaging application bundle"
 cp "$PROJECT_DIR/Sources/Switch/Resources/Info.plist" "$APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $APP_NAME" "$APP_PATH/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.sanyamgarg.switch" "$APP_PATH/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $LOCAL_BUNDLE_ID" "$APP_PATH/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $LOCAL_APP_NAME" "$APP_PATH/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $LOCAL_APP_NAME" "$APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$APP_PATH/Contents/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_PATH/Contents/Info.plist"
 
@@ -87,11 +91,13 @@ done
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
 echo "==> Applying local ad-hoc signature"
+DESIGNATED_REQUIREMENT="=designated => identifier \"$LOCAL_BUNDLE_ID\""
 /usr/bin/codesign \
     --force \
     --sign - \
     --options runtime \
     --timestamp=none \
+    --requirements "$DESIGNATED_REQUIREMENT" \
     --entitlements "$PROJECT_DIR/Sources/Switch/Resources/Switch.entitlements" \
     "$APP_PATH"
 
@@ -101,4 +107,5 @@ echo "==> Applying local ad-hoc signature"
 echo ""
 echo "==> Built $APP_PATH"
 /usr/bin/file "$APP_PATH/Contents/MacOS/$APP_NAME"
+echo "==> Bundle ID: $LOCAL_BUNDLE_ID"
 echo "==> Sparkle is intentionally excluded. Automatic updates are unavailable in this build."
