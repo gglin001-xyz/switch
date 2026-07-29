@@ -2,10 +2,14 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 import ServiceManagement
+#if canImport(Sparkle)
+import Sparkle
+#endif
 
 @MainActor
 final class SettingsModel: ObservableObject {
     @Published var launchAtLogin: Bool = false
+    @Published var autoUpdateCheck: Bool = true
     @Published var allWindows: HotkeyBinding? = HotkeyConfig.shared.allWindows
     @Published var allWindowsAlternate: HotkeyBinding? = HotkeyConfig.shared.allWindowsAlternate
     @Published var currentApp: HotkeyBinding? = HotkeyConfig.shared.currentApp
@@ -16,10 +20,17 @@ final class SettingsModel: ObservableObject {
 
     init() { refresh() }
 
+    #if canImport(Sparkle)
+    private var updater: SPUUpdater? { (NSApp.delegate as? AppDelegate)?.sparkleUpdater }
+    #endif
+
     func refresh() {
         if #available(macOS 13.0, *) {
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+        #if canImport(Sparkle)
+        autoUpdateCheck = updater?.automaticallyChecksForUpdates ?? true
+        #endif
         allWindows = HotkeyConfig.shared.allWindows
         allWindowsAlternate = HotkeyConfig.shared.allWindowsAlternate
         currentApp = HotkeyConfig.shared.currentApp
@@ -43,6 +54,13 @@ final class SettingsModel: ObservableObject {
                 refresh()
             }
         }
+    }
+
+    func setAutoUpdateCheck(_ enabled: Bool) {
+        #if canImport(Sparkle)
+        updater?.automaticallyChecksForUpdates = enabled
+        #endif
+        autoUpdateCheck = enabled
     }
 
     func updateAllWindows(_ b: HotkeyBinding?) {
@@ -207,6 +225,19 @@ struct SettingsView: View {
                     .background(rowBackground)
                 }
 
+                section("Updates") {
+                    row(title: "Check for updates automatically",
+                        detail: "Look for new versions in the background and offer to install them. Turn off if you update through Homebrew.") {
+                        Toggle("", isOn: Binding(
+                            get: { model.autoUpdateCheck },
+                            set: { model.setAutoUpdateCheck($0) }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(prefs.accent.color)
+                    }
+                }
+
                 section("Switch") {
                     row(title: "Quit Switch",
                         detail: "Relaunch any time from Spotlight or your Applications folder.") {
@@ -268,6 +299,20 @@ struct SettingsView: View {
                         if prefs.staticOrder {
                             Divider().opacity(0.4)
                             appOrderList
+                        }
+                        Divider().opacity(0.4)
+                        row(title: "Hide minimized and hidden windows",
+                            detail: "Leave out windows that are minimized to the Dock or belong to hidden apps.") {
+                            Toggle("", isOn: $prefs.hideMinimizedWindows)
+                                .labelsHidden().toggleStyle(.switch)
+                                .tint(prefs.accent.color)
+                        }
+                        Divider().opacity(0.4)
+                        row(title: "Show number key hints",
+                            detail: "Label the first nine windows with the 1-9 key that picks them.") {
+                            Toggle("", isOn: $prefs.showNumberKeyHints)
+                                .labelsHidden().toggleStyle(.switch)
+                                .tint(prefs.accent.color)
                         }
                         Divider().opacity(0.4)
                         row(title: "Include apps with no windows",

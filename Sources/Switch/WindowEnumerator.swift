@@ -59,23 +59,27 @@ enum WindowEnumerator {
     // background queue and noteSwitchMovedWindow is called from the focus path.
     private static let ghostLock = NSLock()
     private static var ghostStrikes: [CGWindowID: (first: Date, count: Int)] = [:]
-    private static var switchMovedWindows: Set<CGWindowID> = []
+    private static var switchMovedWindows: [CGWindowID: Date] = [:]
+    private static let switchMovedGrace: TimeInterval = 10
 
     /// Record a window Switch just pulled to the current Space via
     /// CGSMoveWindowsToManagedSpace so the current-space-claim prune skips it: a
     /// failed raise must not strand it as a self-inflicted ghost (v0.3.9 rescue path).
     static func noteSwitchMovedWindow(_ id: CGWindowID) {
         ghostLock.lock()
-        switchMovedWindows.insert(id)
+        switchMovedWindows[id] = Date()
         ghostLock.unlock()
     }
 
     // True once the current-space-claim ghost is confirmed: count ≥ 2 and ≥ 2.5s
-    // since the first strike. Exempt (Switch-moved) wids never accrue strikes.
+    // since the first strike. Switch-moved wids don't accrue strikes for 10s (#115).
     private static func ghostStrikeConfirmed(_ id: CGWindowID) -> Bool {
         ghostLock.lock()
         defer { ghostLock.unlock() }
-        if switchMovedWindows.contains(id) { return false }
+        if let moved = switchMovedWindows[id] {
+            if Date().timeIntervalSince(moved) < switchMovedGrace { return false }
+            switchMovedWindows.removeValue(forKey: id)
+        }
         let now = Date()
         if var entry = ghostStrikes[id] {
             entry.count += 1
@@ -101,7 +105,9 @@ enum WindowEnumerator {
         for id in ghostStrikes.keys where onScreen.contains(id) || axBacked.contains(id) || !enumerated.contains(id) {
             ghostStrikes.removeValue(forKey: id)
         }
-        switchMovedWindows.subtract(onScreen)
+        for id in switchMovedWindows.keys where onScreen.contains(id) || !enumerated.contains(id) {
+            switchMovedWindows.removeValue(forKey: id)
+        }
     }
 
     static func fullSnapshot() -> FullSnapshot {
@@ -112,6 +118,8 @@ enum WindowEnumerator {
         let cid = CGSMainConnectionID()
         let metadata = spaceMetadata(cid: cid)
         let stageManager = stageManagerEnabled
+        // Without Screen Recording every CG title is empty, so emptiness is no ghost signal (#106).
+        let titlesReliable = CGPreflightScreenCaptureAccess()
 
         let active = pruneGhosts(onScreen, axBacked: ax.axBacked, cid: cid)
         let activeIDs = Set(active.map(\.id))
@@ -120,7 +128,7 @@ enum WindowEnumerator {
             out.isCrossSpace = !activeIDs.contains(w.id)
             return out
         }
-        let annotatedAll = annotateAndPrune(marked, ax: ax, cid: cid, metadata: metadata, stageManager: stageManager)
+        let annotatedAll = annotateAndPrune(marked, ax: ax, cid: cid, metadata: metadata, stageManager: stageManager, titlesReliable: titlesReliable)
         let onScreenIDs = Set(onScreen.map(\.id))
         housekeepGhostState(
             onScreen: onScreenIDs,
@@ -203,7 +211,8 @@ enum WindowEnumerator {
         ax: (axBacked: Set<CGWindowID>, minimized: Set<CGWindowID>),
         cid: CGSConnectionID,
         metadata: (labels: [Int: (label: String, isFullscreen: Bool)], order: [Int], currentSpaces: Set<Int>),
-        stageManager: Bool
+        stageManager: Bool,
+        titlesReliable: Bool
     ) -> [WindowInfo] {
         return candidates.compactMap { w in
             var out = w
@@ -242,7 +251,7 @@ enum WindowEnumerator {
                 // CG title — real cross-Space windows always carry one (browser windows
                 // have a page title), so an untitled shell on any live Space is a ghost.
                 let currentClaim = spaces.contains(where: { metadata.currentSpaces.contains($0) })
-                if out.isCrossSpace && (currentClaim || out.title.isEmpty) {
+                if out.isCrossSpace && (currentClaim || (titlesReliable && out.title.isEmpty)) {
                     if ghostStrikeConfirmed(w.id) { return nil }
                 } else {
                     clearGhostStrike(w.id)
@@ -333,6 +342,7 @@ enum WindowEnumerator {
         }
         var out: [WindowInfo] = []
         var seenIDs: Set<CGWindowID> = []
+        let titlesReliable = CGPreflightScreenCaptureAccess()
         for d in raw {
             let appName = d[kCGWindowOwnerName as String] as? String ?? ""
             guard let layer = d[kCGWindowLayer as String] as? Int, layer == 0 else { continue }
@@ -354,7 +364,8 @@ enum WindowEnumerator {
                 height: boundsDict["Height"] ?? 0
             )
             if bounds.width < 100 || bounds.height < 80 { continue }
-            if title.isEmpty && (bounds.width < 400 || bounds.height < 300) { continue }
+            if title.isEmpty && titlesReliable
+                && (bounds.width < 400 || bounds.height < 300) { continue }
             // Dedupe by CGWindowID only — it's already unique per window.
             // The earlier (pid, title, bounds) dedupe was collapsing multiple
             // Chrome windows that shared the same active-tab title.

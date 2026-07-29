@@ -50,14 +50,30 @@ struct SwitchView: View {
     @ViewBuilder
     private func windowBadge(for window: WindowInfo) -> some View {
         if window.isMinimized || window.isHidden || window.isCrossSpace || window.isWindowless {
-            Text(windowBadgeText(for: window))
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.5)
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
+            capsuleBadge(windowBadgeText(for: window))
+        }
+    }
+
+    private func capsuleBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .tracking(0.5)
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.black.opacity(0.55))
+            .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private func numberHint(index: Int) -> some View {
+        if prefs.showNumberKeyHints && !isSpaceMode && index < 9 {
+            Text("\(index + 1)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(width: 16, height: 16)
+                .background(Color.black.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
     }
 
@@ -366,6 +382,7 @@ struct SwitchView: View {
 
             HStack(spacing: 6) {
                 let titleFirst = prefs.showTitleFirst && !window.title.isEmpty
+                numberHint(index: index)
                 Text(titleFirst ? window.title : window.appName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary)
@@ -396,6 +413,7 @@ struct SwitchView: View {
         let icon = appIcon(for: window)
 
         return HStack(spacing: 11) {
+            numberHint(index: index)
             ZStack {
                 if let icon {
                     Image(nsImage: icon)
@@ -431,14 +449,7 @@ struct SwitchView: View {
             }
             if isSpaceMode {
                 if window.spaceLabel == "Current" {
-                    Text("CURRENT")
-                        .font(.system(size: 9, weight: .semibold))
-                        .tracking(0.5)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
+                    capsuleBadge("CURRENT")
                 }
             } else {
                 windowBadge(for: window)
