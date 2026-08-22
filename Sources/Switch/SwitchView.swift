@@ -193,7 +193,7 @@ struct SwitchView: View {
                         }
                     }
                     .onChange(of: model.selected) { _, new in
-                        // Skip auto-scroll when selection came from mouse hover —
+                        // Skip auto-scroll when selection came from mouse hover;
                         // user is already looking at where they're pointing.
                         if lastSelectionFromMouse {
                             lastSelectionFromMouse = false
@@ -506,17 +506,19 @@ private struct SelectionChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
+                // Clipping at the row level hides the matched-geometry fill while it slides between rows, so the rounding lives on the fills themselves (#133).
                 ZStack {
                     if hovered && !selected {
-                        Color.white.opacity(0.06)
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
                     }
                     if selected {
-                        accent.opacity(0.22)
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(accent.opacity(0.22))
                             .matchedGeometryEffect(id: "selectionBG", in: namespace)
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 ZStack {
                     if selected {

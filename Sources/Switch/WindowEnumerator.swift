@@ -216,17 +216,25 @@ enum WindowEnumerator {
     ) -> [WindowInfo] {
         return candidates.compactMap { w in
             var out = w
-            if out.isHidden {
-                out.isCrossSpace = false
-                return out
-            }
-            if ax.minimized.contains(w.id) {
-                out.isMinimized = true
-                out.isCrossSpace = false
-                return out
-            }
             let arr = [NSNumber(value: w.id)] as CFArray
             let spaces = CGSCopySpacesForWindows(cid, 7, arr)?.takeRetainedValue() as? [Int] ?? []
+            if out.isHidden || ax.minimized.contains(w.id) {
+                out.isMinimized = ax.minimized.contains(w.id)
+                // A window with no Space claim counts as current, older macOS drops the assignment once a window is ordered out (#129).
+                out.isCrossSpace = !spaces.isEmpty && !spaces.contains(where: { metadata.currentSpaces.contains($0) })
+                // A window AX ever backed is real; the cache outlives per-sweep AX gaps (timeouts, Chromium's off-Space omissions), so a never-backed CG entry is an Electron shell (#126).
+                let everBacked = ax.axBacked.contains(w.id) || AXWindowCache.element(for: w.id) != nil
+                // Same real-window signature as the cross-Space prune below, for windows hidden before Switch ever saw them.
+                let offSpaceReal = out.isCrossSpace && (!titlesReliable || !w.title.isEmpty)
+                guard everBacked || offSpaceReal else { return nil }
+                if let sid = spaces.first {
+                    let info = metadata.labels[sid]
+                    out.spaceID = sid
+                    out.spaceLabel = info?.label
+                    out.isFullscreenSpace = info?.isFullscreen ?? false
+                }
+                return out
+            }
             if spaces.isEmpty {
                 // Empty Space list + no AX window = orderOut'd ghost, drop it.
                 // Empty Space list + live AX window = a real window the window
@@ -248,7 +256,7 @@ enum WindowEnumerator {
                 // so a real window caught mid Space-transition survives (transitions
                 // settle in <1s; Current Space races ahead of CGWindowList and Chromium
                 // exposes no AX in that gap): claims the current Space, or has an empty
-                // CG title — real cross-Space windows always carry one (browser windows
+                // CG title; real cross-Space windows always carry one (browser windows
                 // have a page title), so an untitled shell on any live Space is a ghost.
                 let currentClaim = spaces.contains(where: { metadata.currentSpaces.contains($0) })
                 if out.isCrossSpace && (currentClaim || (titlesReliable && out.title.isEmpty)) {
@@ -366,7 +374,7 @@ enum WindowEnumerator {
             if bounds.width < 100 || bounds.height < 80 { continue }
             if title.isEmpty && titlesReliable
                 && (bounds.width < 400 || bounds.height < 300) { continue }
-            // Dedupe by CGWindowID only — it's already unique per window.
+            // Dedupe by CGWindowID only; it's already unique per window.
             // The earlier (pid, title, bounds) dedupe was collapsing multiple
             // Chrome windows that shared the same active-tab title.
             if seenIDs.contains(id) { continue }

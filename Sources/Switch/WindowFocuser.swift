@@ -40,6 +40,15 @@ enum WindowFocuser {
         let app = NSRunningApplication(processIdentifier: window.pid)
         if app?.isHidden == true { app?.unhide() }
 
+        // Same-Space targets get an early best-effort activate so slow AX apps
+        // (Godot, #117) start coming forward before the raise calls below. The
+        // late activate still runs; cross-Space skips this because the
+        // focused-window write must steer activation first.
+        if !window.isCrossSpace {
+            if let app, NSApp.isActive { NSApp.yieldActivation(to: app) }
+            app?.activate(options: [])
+        }
+
         let appAX = AXUIElementCreateApplication(window.pid)
         var ref: CFTypeRef?
         let axWindows = (AXUIElementCopyAttributeValue(appAX, kAXWindowsAttribute as CFString, &ref) == .success
@@ -119,7 +128,7 @@ enum WindowFocuser {
     /// element captured while the window was on-screen (Chromium apps hide
     /// off-Space windows from kAXWindowsAttribute entirely, so the live list
     /// misses exactly the windows that need cross-Space focusing). Bounds and
-    /// title matching remain as last resorts; never `first` — raising an
+    /// title matching remain as last resorts; never `first`; raising an
     /// arbitrary sibling sends focus to the wrong window.
     private static func bestMatch(for window: WindowInfo, in axWindows: [AXUIElement]) -> AXUIElement? {
         if let exact = axWindows.first(where: { axWindowID($0) == window.id }) {
@@ -154,7 +163,7 @@ enum WindowCloser {
     static func close(_ window: WindowInfo) { pressButton(window, attribute: kAXCloseButtonAttribute) }
 
     /// Close only the specific window, resolving its AX element the way focus does
-    /// (live wid match, then AXWindowCache) — never an arbitrary sibling. Returns
+    /// (live wid match, then AXWindowCache), never an arbitrary sibling. Returns
     /// false without acting when nothing resolves, so callers can decline to fall back.
     @discardableResult
     static func closeExact(_ window: WindowInfo) -> Bool {

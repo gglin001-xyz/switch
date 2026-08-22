@@ -10,6 +10,14 @@ extension Notification.Name {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    // Under the SwiftUI lifecycle NSApp.delegate is SwiftUI's own wrapper, so casting it to AppDelegate finds nothing (#127).
+    private(set) static weak var shared: AppDelegate?
+
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
+
     #if canImport(Sparkle)
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
@@ -153,10 +161,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.focusTracker = FocusTracker()
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(showOnboarding),
-            name: .switchShowOnboarding, object: nil
-        )
-        NotificationCenter.default.addObserver(
             self, selector: #selector(handleCheckForUpdates),
             name: .switchCheckForUpdates, object: nil
         )
@@ -294,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    @objc private func showOnboarding() {
+    private func showOnboarding() {
         guard let onboardingModel else { return }
         if onboardingWindow == nil {
             let host = NSHostingController(rootView: OnboardingView().environmentObject(onboardingModel))

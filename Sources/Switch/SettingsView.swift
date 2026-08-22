@@ -21,7 +21,7 @@ final class SettingsModel: ObservableObject {
     init() { refresh() }
 
     #if canImport(Sparkle)
-    private var updater: SPUUpdater? { (NSApp.delegate as? AppDelegate)?.sparkleUpdater }
+    private var updater: SPUUpdater? { AppDelegate.shared?.sparkleUpdater }
     #endif
 
     func refresh() {
@@ -860,18 +860,6 @@ struct SettingsView: View {
         .help(choice.label)
     }
 
-    private func pillLink(_ title: String, url: String) -> some View {
-        Link(destination: URL(string: url)!) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
-                .background(Color.primary.opacity(0.07))
-                .foregroundStyle(.primary)
-                .clipShape(Capsule())
-        }
-    }
-
     private func applyHotkey(_ b: HotkeyBinding?, replacing old: HotkeyBinding?, save: (HotkeyBinding?) -> Void) {
         guard let b else {
             rejectMessage = nil
@@ -1026,17 +1014,17 @@ final class KeyRecorderNSView: NSView {
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        if recording { stopRecording(commit: false) } else { startRecording() }
+        if recording { stopRecording() } else { startRecording() }
     }
 
     override func resignFirstResponder() -> Bool {
-        stopRecording(commit: false)
+        stopRecording()
         return super.resignFirstResponder()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { stopRecording(commit: false) }
+        if window == nil { stopRecording() }
     }
 
     deinit { teardownTap() }
@@ -1063,13 +1051,13 @@ final class KeyRecorderNSView: NSView {
             resignToken = NotificationCenter.default.addObserver(
                 forName: NSWindow.didResignKeyNotification, object: win, queue: .main
             ) { [weak self] _ in
-                self?.stopRecording(commit: false)
+                self?.stopRecording()
             }
         }
         NotificationCenter.default.post(name: .switchRecorderBegan, object: nil)
     }
 
-    private func stopRecording(commit: Bool) {
+    private func stopRecording() {
         let wasRecording = eventTap != nil || recording
         teardownTap()
         recording = false
@@ -1091,15 +1079,17 @@ final class KeyRecorderNSView: NSView {
         if type == .flagsChanged { return nil }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
         let kc = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        let mods: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+        let held = event.flags.intersection(mods)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            if kc != 53 {
-                let mods: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
-                let b = HotkeyBinding(keyCode: UInt16(kc), modifiersRaw: event.flags.intersection(mods).rawValue)
+            // Bare Esc cancels; Esc with a modifier is a recordable combo (#116).
+            if kc != 53 || !held.isEmpty {
+                let b = HotkeyBinding(keyCode: UInt16(kc), modifiersRaw: held.rawValue)
                 self.binding = b
                 self.onCapture?(b)
             }
-            self.stopRecording(commit: kc != 53)
+            self.stopRecording()
         }
         return nil
     }
