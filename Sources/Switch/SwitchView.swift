@@ -68,7 +68,7 @@ struct SwitchView: View {
     @ViewBuilder
     private func numberHint(index: Int) -> some View {
         if prefs.showNumberKeyHints && !isSpaceMode && index < 9 {
-            Text("\(index + 1)")
+            Text(prefs.homeRowSelection ? SwitchPreferences.homeRowKeys[index].uppercased() : "\(index + 1)")
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(width: 16, height: 16)
@@ -151,7 +151,7 @@ struct SwitchView: View {
                     .foregroundStyle(.primary)
             }
             Spacer()
-            if !model.filteredWindows.isEmpty {
+            if prefs.showWindowCount && !model.filteredWindows.isEmpty {
                 Text(isSpaceMode ? "\(model.filteredWindows.count) spaces" : "\(model.filteredWindows.count)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
@@ -239,11 +239,14 @@ struct SwitchView: View {
     }
 
     private var navKey: String {
-        (prefs.verticalList || isSpaceMode) ? "↑↓" : "←↑↓→"
+        if prefs.verticalList || isSpaceMode {
+            return prefs.vimNavigation ? "↑↓ / jk" : "↑↓"
+        }
+        return prefs.vimNavigation ? "←↑↓→ / hjkl" : "←↑↓→"
     }
 
     private var closeKey: String {
-        (prefs.stickyMode || !prefs.typeToFilter) ? "⌘W" : "⇧⌘W"
+        (model.stickySession || !prefs.typeToFilter) ? "⌘W" : "⇧⌘W"
     }
 
     private func stoplights(for window: WindowInfo) -> some View {

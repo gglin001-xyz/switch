@@ -8,6 +8,12 @@ final class SwitchPreferences: ObservableObject {
     nonisolated static let defaultThumbnailHeight = 130.0
     nonisolated static let defaultAppIconSize = 32.0
     nonisolated static let defaultGridColumns = 4
+    nonisolated static let defaultMaxListRows = 8
+    nonisolated static let defaultPanelWidthScale = 1.0
+    nonisolated static let minPanelWidthScale = 0.65  // 572pt grid, above its 560pt floor
+    nonisolated static let maxPanelWidthScale = 2.4  // covers the 300pt thumbnail maximum when migrating
+    nonisolated static let defaultGridPanelWidth = 880.0
+    nonisolated static let defaultListPanelWidth = 520.0
     nonisolated static let defaultPickerActivationDelay = 130.0
     nonisolated static let compactThumbnailHeight = 72.0
     nonisolated static let defaultShowTitleFirst = true
@@ -46,6 +52,37 @@ final class SwitchPreferences: ObservableObject {
         }
     }
 
+    enum Appearance: String, CaseIterable, Identifiable {
+        case system, light, dark
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .system: return "System"
+            case .light: return "Light"
+            case .dark: return "Dark"
+            }
+        }
+        var nsAppearance: NSAppearance? {
+            switch self {
+            case .system: return nil
+            case .light: return NSAppearance(named: .aqua)
+            case .dark: return NSAppearance(named: .darkAqua)
+            }
+        }
+    }
+
+    enum PickerDisplay: String, CaseIterable, Identifiable {
+        case mouse, active, primary
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .mouse: return "Mouse"
+            case .active: return "Active"
+            case .primary: return "Primary"
+            }
+        }
+    }
+
     enum BackgroundBlur: String, CaseIterable, Identifiable {
         case light, medium, heavy
         var id: String { rawValue }
@@ -80,12 +117,20 @@ final class SwitchPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(backgroundBlur.rawValue, forKey: backgroundBlurKey) }
     }
 
+    @Published var appearance: Appearance {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: appearanceKey) }
+    }
+
+    @Published var moveCursorToWindow: Bool {
+        didSet { UserDefaults.standard.set(moveCursorToWindow, forKey: SwitchPreferences.moveCursorToWindowKey) }
+    }
+
     @Published var showTitleFirst: Bool {
         didSet { UserDefaults.standard.set(showTitleFirst, forKey: showTitleFirstKey) }
     }
 
     @Published var showCrossSpace: Bool {
-        didSet { UserDefaults.standard.set(showCrossSpace, forKey: crossSpaceKey) }
+        didSet { UserDefaults.standard.set(showCrossSpace, forKey: SwitchPreferences.crossSpaceKey) }
     }
 
     @Published var stickyMode: Bool {
@@ -108,6 +153,14 @@ final class SwitchPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(Array(blacklist), forKey: SwitchPreferences.blacklistKey) }
     }
 
+    @Published var passthroughApps: Set<String> {
+        didSet { UserDefaults.standard.set(Array(passthroughApps), forKey: SwitchPreferences.passthroughAppsKey) }
+    }
+
+    @Published var titleExclusions: [String] {
+        didSet { UserDefaults.standard.set(titleExclusions, forKey: SwitchPreferences.titleExclusionsKey) }
+    }
+
     @Published var mruMixSpaces: Bool {
         didSet { UserDefaults.standard.set(mruMixSpaces, forKey: mruMixSpacesKey) }
     }
@@ -122,15 +175,6 @@ final class SwitchPreferences: ObservableObject {
 
     @Published var includeWindowlessApps: Bool {
         didSet { UserDefaults.standard.set(includeWindowlessApps, forKey: SwitchPreferences.includeWindowlessKey) }
-    }
-
-    @Published var showHiddenAndMinimizedWindows: Bool {
-        didSet {
-            UserDefaults.standard.set(
-                showHiddenAndMinimizedWindows,
-                forKey: SwitchPreferences.showHiddenAndMinimizedWindowsKey
-            )
-        }
     }
 
     @Published var hideMenuBarIcon: Bool {
@@ -161,8 +205,36 @@ final class SwitchPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(showHintStrip, forKey: SwitchPreferences.showHintStripKey) }
     }
 
+    @Published var showWindowCount: Bool {
+        didSet { UserDefaults.standard.set(showWindowCount, forKey: SwitchPreferences.showWindowCountKey) }
+    }
+
+    @Published var currentDisplayOnly: Bool {
+        didSet { UserDefaults.standard.set(currentDisplayOnly, forKey: SwitchPreferences.currentDisplayOnlyKey) }
+    }
+
     @Published var typeToFilter: Bool {
-        didSet { UserDefaults.standard.set(typeToFilter, forKey: SwitchPreferences.typeToFilterKey) }
+        didSet {
+            UserDefaults.standard.set(typeToFilter, forKey: SwitchPreferences.typeToFilterKey)
+            if typeToFilter && vimNavigation { vimNavigation = false }
+            if typeToFilter && homeRowSelection { homeRowSelection = false }
+        }
+    }
+
+    @Published var vimNavigation: Bool {
+        didSet {
+            UserDefaults.standard.set(vimNavigation, forKey: SwitchPreferences.vimNavigationKey)
+            if vimNavigation && typeToFilter { typeToFilter = false }
+            if vimNavigation && homeRowSelection { homeRowSelection = false }
+        }
+    }
+
+    @Published var homeRowSelection: Bool {
+        didSet {
+            UserDefaults.standard.set(homeRowSelection, forKey: SwitchPreferences.homeRowSelectionKey)
+            if homeRowSelection && typeToFilter { typeToFilter = false }
+            if homeRowSelection && vimNavigation { vimNavigation = false }
+        }
     }
 
     @Published var thumbnailHeight: Double {
@@ -175,6 +247,14 @@ final class SwitchPreferences: ObservableObject {
 
     @Published var gridColumns: Int {
         didSet { UserDefaults.standard.set(gridColumns, forKey: SwitchPreferences.gridColumnsKey) }
+    }
+
+    @Published var maxListRows: Int {
+        didSet { UserDefaults.standard.set(maxListRows, forKey: SwitchPreferences.maxListRowsKey) }
+    }
+
+    @Published var panelWidthScale: Double {
+        didSet { UserDefaults.standard.set(panelWidthScale, forKey: SwitchPreferences.panelWidthScaleKey) }
     }
 
     @Published var pinnedBundleIDs: Set<String> {
@@ -197,20 +277,27 @@ final class SwitchPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(showNumberKeyHints, forKey: SwitchPreferences.showNumberKeyHintsKey) }
     }
 
+    @Published var pickerDisplay: PickerDisplay {
+        didSet { UserDefaults.standard.set(pickerDisplay.rawValue, forKey: SwitchPreferences.pickerDisplayKey) }
+    }
+
     private let accentKey = "switch.accent"
     private let backgroundBlurKey = "switch.backgroundBlur"
+    private let appearanceKey = "switch.appearance"
+    nonisolated static let moveCursorToWindowKey = "switch.moveCursorToWindow"
     private let showTitleFirstKey = "switch.showTitleFirst"
-    private let crossSpaceKey = "switch.showCrossSpace"
+    nonisolated static let crossSpaceKey = "switch.showCrossSpace"
     nonisolated static let stickyModeKey = "switch.stickyMode"
     nonisolated static let disableMouseKey = "switch.disableMouse"
     private let disableAnimationsKey = "switch.disableAnimations"
     nonisolated static let verticalListKey = "switch.verticalList"
     nonisolated static let blacklistKey = "switch.blacklist"
+    nonisolated static let passthroughAppsKey = "switch.passthroughApps"
+    nonisolated static let titleExclusionsKey = "switch.titleExclusions"
     private let mruMixSpacesKey = "switch.mruMixSpaces"
     nonisolated static let staticOrderKey = "switch.staticOrder"
     nonisolated static let appOrderKey = "switch.appOrder"
     nonisolated static let includeWindowlessKey = "switch.includeWindowlessApps"
-    nonisolated static let showHiddenAndMinimizedWindowsKey = "switch.showHiddenAndMinimizedWindows"
     nonisolated static let hideMenuBarIconKey = "switch.hideMenuBarIcon"
     nonisolated static let showThumbnailsKey = "switch.showThumbnails"
     nonisolated static let showStoplightsKey = "switch.showStoplights"
@@ -218,33 +305,43 @@ final class SwitchPreferences: ObservableObject {
     nonisolated static let verticalShowPreviewKey = "switch.verticalShowPreview"
     nonisolated static let verticalShowHeaderKey = "switch.verticalShowHeader"
     nonisolated static let showHintStripKey = "switch.showHintStrip"
+    nonisolated static let showWindowCountKey = "switch.showWindowCount"
+    nonisolated static let currentDisplayOnlyKey = "switch.currentDisplayOnly"
     nonisolated static let typeToFilterKey = "switch.typeToFilter"
+    nonisolated static let vimNavigationKey = "switch.vimNavigation"
+    nonisolated static let homeRowSelectionKey = "switch.homeRowSelection"
+    // Pick windows 1-9 by layout character; H is left out so ⌘H still hides (#171).
+    nonisolated static let homeRowKeys: [Character] = ["a", "s", "d", "f", "g", "j", "k", "l", ";"]
     nonisolated static let thumbnailHeightKey = "switch.thumbnailHeight"
     nonisolated static let appIconSizeKey = "switch.appIconSize"
     nonisolated static let gridColumnsKey = "switch.gridColumns"
+    nonisolated static let maxListRowsKey = "switch.maxListRows"
+    nonisolated static let panelWidthScaleKey = "switch.panelWidthScale"
     nonisolated static let pinnedBundleIDsKey = "switch.pinnedBundleIDs"
     nonisolated static let pickerActivationDelayKey = "switch.pickerActivationDelay"
     nonisolated static let shiftTapReversesKey = "switch.shiftTapReverses"
     nonisolated static let hideMinimizedWindowsKey = "switch.hideMinimizedWindows"
     nonisolated static let showNumberKeyHintsKey = "switch.showNumberKeyHints"
+    nonisolated static let pickerDisplayKey = "switch.pickerDisplay"
 
     private init() {
         accent = AccentChoice(rawValue: UserDefaults.standard.string(forKey: accentKey) ?? "") ?? .system
+        appearance = Appearance(rawValue: UserDefaults.standard.string(forKey: appearanceKey) ?? "") ?? .system
+        moveCursorToWindow = UserDefaults.standard.bool(forKey: SwitchPreferences.moveCursorToWindowKey)
         backgroundBlur = BackgroundBlur(rawValue: UserDefaults.standard.string(forKey: backgroundBlurKey) ?? "") ?? .light
         showTitleFirst = (UserDefaults.standard.object(forKey: showTitleFirstKey) as? Bool) ?? Self.defaultShowTitleFirst
-        showCrossSpace = (UserDefaults.standard.object(forKey: crossSpaceKey) as? Bool) ?? true
+        showCrossSpace = (UserDefaults.standard.object(forKey: SwitchPreferences.crossSpaceKey) as? Bool) ?? true
         stickyMode = UserDefaults.standard.bool(forKey: SwitchPreferences.stickyModeKey)
         disableMouse = UserDefaults.standard.bool(forKey: SwitchPreferences.disableMouseKey)
         disableAnimations = (UserDefaults.standard.object(forKey: disableAnimationsKey) as? Bool) ?? Self.defaultDisableAnimations
         verticalList = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalListKey) as? Bool) ?? Self.defaultVerticalList
         blacklist = Set(UserDefaults.standard.stringArray(forKey: SwitchPreferences.blacklistKey) ?? [])
-        mruMixSpaces = (UserDefaults.standard.object(forKey: "switch.mruMixSpaces") as? Bool) ?? true
+        passthroughApps = Set(UserDefaults.standard.stringArray(forKey: SwitchPreferences.passthroughAppsKey) ?? [])
+        titleExclusions = UserDefaults.standard.stringArray(forKey: SwitchPreferences.titleExclusionsKey) ?? []
+        mruMixSpaces = (UserDefaults.standard.object(forKey: mruMixSpacesKey) as? Bool) ?? true
         staticOrder = UserDefaults.standard.bool(forKey: SwitchPreferences.staticOrderKey)
         appOrder = UserDefaults.standard.stringArray(forKey: SwitchPreferences.appOrderKey) ?? []
         includeWindowlessApps = UserDefaults.standard.bool(forKey: SwitchPreferences.includeWindowlessKey)
-        showHiddenAndMinimizedWindows = UserDefaults.standard.bool(
-            forKey: SwitchPreferences.showHiddenAndMinimizedWindowsKey
-        )
         hideMenuBarIcon = UserDefaults.standard.bool(forKey: SwitchPreferences.hideMenuBarIconKey)
         showThumbnails = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? Self.defaultShowThumbnails
         showStoplights = (UserDefaults.standard.object(forKey: SwitchPreferences.showStoplightsKey) as? Bool) ?? Self.defaultShowStoplights
@@ -252,14 +349,33 @@ final class SwitchPreferences: ObservableObject {
         verticalShowPreview = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool) ?? Self.defaultVerticalShowPreview
         verticalShowHeader = (UserDefaults.standard.object(forKey: SwitchPreferences.verticalShowHeaderKey) as? Bool) ?? true
         showHintStrip = (UserDefaults.standard.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? Self.defaultShowHintStrip
-        typeToFilter = (UserDefaults.standard.object(forKey: SwitchPreferences.typeToFilterKey) as? Bool) ?? true
+        showWindowCount = (UserDefaults.standard.object(forKey: SwitchPreferences.showWindowCountKey) as? Bool) ?? true
+        currentDisplayOnly = UserDefaults.standard.bool(forKey: SwitchPreferences.currentDisplayOnlyKey)
+        let storedHomeRow = UserDefaults.standard.bool(forKey: SwitchPreferences.homeRowSelectionKey)
+        let storedVimNavigation = !storedHomeRow && UserDefaults.standard.bool(forKey: SwitchPreferences.vimNavigationKey)
+        homeRowSelection = storedHomeRow
+        vimNavigation = storedVimNavigation
+        typeToFilter = storedVimNavigation || storedHomeRow
+            ? false
+            : (UserDefaults.standard.object(forKey: SwitchPreferences.typeToFilterKey) as? Bool) ?? true
         thumbnailHeight = (UserDefaults.standard.object(forKey: SwitchPreferences.thumbnailHeightKey) as? Double) ?? Self.defaultThumbnailHeight
         appIconSize = (UserDefaults.standard.object(forKey: SwitchPreferences.appIconSizeKey) as? Double) ?? Self.defaultAppIconSize
         gridColumns = (UserDefaults.standard.object(forKey: SwitchPreferences.gridColumnsKey) as? Int) ?? Self.defaultGridColumns
+        maxListRows = (UserDefaults.standard.object(forKey: SwitchPreferences.maxListRowsKey) as? Int) ?? Self.defaultMaxListRows
+        // Before this setting, thumbnail size also set the panel width; start from that so nobody's panel shrinks.
+        let storedPanelWidth = UserDefaults.standard.object(forKey: SwitchPreferences.panelWidthScaleKey) as? Double
+        let panelWidth = Self.clampedPanelWidthScale(storedPanelWidth ?? (UserDefaults.standard.object(forKey: SwitchPreferences.thumbnailHeightKey) as? Double ?? Self.defaultThumbnailHeight) / Self.defaultThumbnailHeight)
+        panelWidthScale = panelWidth
+        if storedPanelWidth == nil { UserDefaults.standard.set(panelWidth, forKey: SwitchPreferences.panelWidthScaleKey) }
         pinnedBundleIDs = Set(UserDefaults.standard.stringArray(forKey: SwitchPreferences.pinnedBundleIDsKey) ?? [])
         pickerActivationDelay = (UserDefaults.standard.object(forKey: SwitchPreferences.pickerActivationDelayKey) as? Double) ?? Self.defaultPickerActivationDelay
         shiftTapReverses = UserDefaults.standard.bool(forKey: SwitchPreferences.shiftTapReversesKey)
         hideMinimizedWindows = UserDefaults.standard.bool(forKey: SwitchPreferences.hideMinimizedWindowsKey)
         showNumberKeyHints = UserDefaults.standard.bool(forKey: SwitchPreferences.showNumberKeyHintsKey)
+        pickerDisplay = PickerDisplay(rawValue: UserDefaults.standard.string(forKey: SwitchPreferences.pickerDisplayKey) ?? "") ?? .mouse
+    }
+
+    nonisolated static func clampedPanelWidthScale(_ raw: Double?) -> Double {
+        min(maxPanelWidthScale, max(minPanelWidthScale, raw ?? defaultPanelWidthScale))
     }
 }

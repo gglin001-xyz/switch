@@ -32,14 +32,15 @@ Or quit Switch and drag `Switch.app` from `/Applications` to the Trash.
 - ⌘-Tab cycles all windows
 - ⌘-` cycles within the current app
 - type to filter inline
+- optional Vim-style H J K L navigation
 - 1-9 (or numpad) picks a tile
-- ⌘W close window, ⌘Q quit app, ⌘H hide app
+- ⇧⌘W close window, ⇧⌘Q quit app, ⇧⌘H hide app (no ⇧ needed in sticky mode or with type to filter off)
 - ↵ commits, Esc cancels
 - MRU ordering, picker pre-warms in the background
 
 ## Cross-Space
 
-Windows on other Spaces show up in the picker, badged OTHER SPACE. Pick one and it moves to your current Space, no Mission Control animation. Toggle off, and choose whether to mix Spaces by recency, in Settings → Cross-Space.
+Windows on other Spaces show up in the picker, badged OTHER SPACE. Pick one and Switch takes you to it. Toggle off, and choose whether to mix Spaces by recency, in Settings → Cross-Space.
 
 ## Vertical list
 

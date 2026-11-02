@@ -10,13 +10,7 @@ import Sparkle
 final class SettingsModel: ObservableObject {
     @Published var launchAtLogin: Bool = false
     @Published var autoUpdateCheck: Bool = true
-    @Published var allWindows: HotkeyBinding? = HotkeyConfig.shared.allWindows
-    @Published var allWindowsAlternate: HotkeyBinding? = HotkeyConfig.shared.allWindowsAlternate
-    @Published var currentApp: HotkeyBinding? = HotkeyConfig.shared.currentApp
-    @Published var currentAppAlternate: HotkeyBinding? = HotkeyConfig.shared.currentAppAlternate
-    @Published var spaces: HotkeyBinding? = HotkeyConfig.shared.spaces
-    @Published var spacesAlternate: HotkeyBinding? = HotkeyConfig.shared.spacesAlternate
-    @Published var stickyToggle: HotkeyBinding? = HotkeyConfig.shared.stickyToggle
+    @Published var bindings: [HotkeyConfig.Slot: HotkeyBinding] = [:]
 
     init() { refresh() }
 
@@ -25,34 +19,24 @@ final class SettingsModel: ObservableObject {
     #endif
 
     func refresh() {
-        if #available(macOS 13.0, *) {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
         #if canImport(Sparkle)
         autoUpdateCheck = updater?.automaticallyChecksForUpdates ?? true
         #endif
-        allWindows = HotkeyConfig.shared.allWindows
-        allWindowsAlternate = HotkeyConfig.shared.allWindowsAlternate
-        currentApp = HotkeyConfig.shared.currentApp
-        currentAppAlternate = HotkeyConfig.shared.currentAppAlternate
-        spaces = HotkeyConfig.shared.spaces
-        spacesAlternate = HotkeyConfig.shared.spacesAlternate
-        stickyToggle = HotkeyConfig.shared.stickyToggle
+        bindings = HotkeyConfig.Slot.allCases.reduce(into: [:]) { $0[$1] = HotkeyConfig.shared[$1] }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
-        if #available(macOS 13.0, *) {
-            do {
-                if enabled {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-                launchAtLogin = enabled
-            } catch {
-                NSLog("Switch: login-item toggle failed: \(error)")
-                refresh()
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
             }
+            launchAtLogin = enabled
+        } catch {
+            NSLog("Switch: login-item toggle failed: \(error)")
+            refresh()
         }
     }
 
@@ -63,39 +47,9 @@ final class SettingsModel: ObservableObject {
         autoUpdateCheck = enabled
     }
 
-    func updateAllWindows(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.allWindows = b
-        allWindows = b
-    }
-
-    func updateAllWindowsAlternate(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.allWindowsAlternate = b
-        allWindowsAlternate = b
-    }
-
-    func updateCurrentApp(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.currentApp = b
-        currentApp = b
-    }
-
-    func updateCurrentAppAlternate(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.currentAppAlternate = b
-        currentAppAlternate = b
-    }
-
-    func updateSpaces(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.spaces = b
-        spaces = b
-    }
-
-    func updateSpacesAlternate(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.spacesAlternate = b
-        spacesAlternate = b
-    }
-
-    func updateStickyToggle(_ b: HotkeyBinding?) {
-        HotkeyConfig.shared.stickyToggle = b
-        stickyToggle = b
+    func update(_ slot: HotkeyConfig.Slot, _ b: HotkeyBinding?) {
+        HotkeyConfig.shared[slot] = b
+        bindings[slot] = b
     }
 
     func resetHotkeys() {
@@ -175,34 +129,25 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 section("Startup") {
-                    row(title: "Launch Switch at login",
-                        detail: "Run automatically when you sign in to your Mac.") {
-                        Toggle("", isOn: Binding(
-                            get: { model.launchAtLogin },
-                            set: { model.setLaunchAtLogin($0) }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .tint(prefs.accent.color)
-                    }
+                    toggleRow("Launch Switch at login",
+                              "Run automatically when you sign in to your Mac.",
+                              Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
                 }
 
                 section("Hotkeys") {
                     VStack(alignment: .leading, spacing: 12) {
-                        hotkeyRow(label: "All windows", binding: model.allWindows,
-                                  alternate: model.allWindowsAlternate,
-                                  onCapture: { applyHotkey($0, replacing: model.allWindows) { model.updateAllWindows($0) } },
-                                  onAlternateCapture: { applyHotkey($0, replacing: model.allWindowsAlternate) { model.updateAllWindowsAlternate($0) } })
-                        hotkeyRow(label: "Current app", binding: model.currentApp,
-                                  alternate: model.currentAppAlternate,
-                                  onCapture: { applyHotkey($0, replacing: model.currentApp) { model.updateCurrentApp($0) } },
-                                  onAlternateCapture: { applyHotkey($0, replacing: model.currentAppAlternate) { model.updateCurrentAppAlternate($0) } })
-                        hotkeyRow(label: "Spaces", binding: model.spaces,
-                                  alternate: model.spacesAlternate,
-                                  detail: "Cycle Spaces. Conflicts with browser tab switching if set to ⌃Tab.",
-                                  onCapture: { applyHotkey($0, replacing: model.spaces) { model.updateSpaces($0) } },
-                                  onAlternateCapture: { applyHotkey($0, replacing: model.spacesAlternate) { model.updateSpacesAlternate($0) } })
-                        stickyToggleRow
+                        hotkeyRow("All windows", rows: [("Primary", .allWindows), ("Alternate", .allWindowsAlternate)])
+                        hotkeyRow("Current app", rows: [("Primary", .currentApp), ("Alternate", .currentAppAlternate)])
+                        hotkeyRow("Spaces", rows: [("Primary", .spaces), ("Alternate", .spacesAlternate)],
+                                  detail: "Cycle Spaces. Conflicts with browser tab switching if set to ⌃Tab.")
+                        hotkeyRow("Sticky picker", rows: [("All windows", .allWindowsSticky), ("Current app", .currentAppSticky)],
+                                  detail: "Opens the picker in sticky mode, leaving your main hotkeys quick.")
+                        hotkeyRow("Current Space", rows: [("Primary", .currentSpace)],
+                                  detail: "All windows on the current Space only, whatever the cross-Space setting.")
+                        hotkeyRow("Current display", rows: [("Primary", .currentDisplay)],
+                                  detail: "All windows on the picker's display only, whatever the display setting.")
+                        hotkeyRow("Sticky toggle", rows: [("Primary", .stickyToggle)],
+                                  detail: "Turns sticky mode on or off for the main hotkeys.")
                         if let msg = rejectMessage {
                             Text(msg)
                                 .font(.system(size: 11))
@@ -226,16 +171,9 @@ struct SettingsView: View {
                 }
 
                 section("Updates") {
-                    row(title: "Check for updates automatically",
-                        detail: "Look for new versions in the background and offer to install them. Turn off if you update through Homebrew.") {
-                        Toggle("", isOn: Binding(
-                            get: { model.autoUpdateCheck },
-                            set: { model.setAutoUpdateCheck($0) }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .tint(prefs.accent.color)
-                    }
+                    toggleRow("Check for updates automatically",
+                              "Look for new versions in the background and offer to install them. Turn off if you update through Homebrew.",
+                              Binding(get: { model.autoUpdateCheck }, set: { model.setAutoUpdateCheck($0) }))
                 }
 
                 section("Switch") {
@@ -255,139 +193,103 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 26) {
                 section("Behavior") {
                     VStack(spacing: 0) {
-                        row(title: "Sticky picker",
-                            detail: "Release ⌘ to leave the picker open. Return to switch, Esc to cancel.") {
-                            Toggle("", isOn: $prefs.stickyMode)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Sticky picker",
+                                  "Release ⌘ to leave the picker open. Return to switch, Esc to cancel.",
+                                  $prefs.stickyMode)
                         Divider().opacity(0.4)
-                        row(title: "Keyboard only",
-                            detail: "Ignore mouse hover and click while the picker is open.") {
-                            Toggle("", isOn: $prefs.disableMouse)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Keyboard only",
+                                  "Ignore mouse hover and click while the picker is open.",
+                                  $prefs.disableMouse)
                         Divider().opacity(0.4)
-                        row(title: "Reduce motion",
-                            detail: "Turn off picker fade, selection movement, and other switcher animations.") {
-                            Toggle("", isOn: $prefs.disableAnimations)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Reduce motion",
+                                  "Turn off picker fade, selection movement, and other switcher animations.",
+                                  $prefs.disableAnimations)
                         Divider().opacity(0.4)
-                        row(title: "Hide menu bar icon",
-                            detail: "Keep Switch off the menu bar. Open Settings by pressing comma while the picker is open.") {
-                            Toggle("", isOn: $prefs.hideMenuBarIcon)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Hide menu bar icon",
+                                  "Keep Switch off the menu bar. Open Settings by pressing comma while the picker is open.",
+                                  $prefs.hideMenuBarIcon)
                         Divider().opacity(0.4)
-                        row(title: "Type to filter",
-                            detail: "Filter windows by typing while the picker is open. When disabled, ⌘W/⌘Q/⌘H work directly.") {
-                            Toggle("", isOn: $prefs.typeToFilter)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Vim navigation",
+                                  "Use H J K L to move the selection. Turns off type to filter and home row keys.",
+                                  $prefs.vimNavigation)
                         Divider().opacity(0.4)
-                        row(title: "Static order",
-                            detail: "Keep windows in the same spot every time instead of sorting by recent use.") {
-                            Toggle("", isOn: $prefs.staticOrder)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Home row keys",
+                                  "Pick the first nine windows with A S D F G J K L ; as well as 1-9. Turns off type to filter and Vim navigation.",
+                                  $prefs.homeRowSelection)
+                        Divider().opacity(0.4)
+                        toggleRow("Type to filter",
+                                  prefs.vimNavigation || prefs.homeRowSelection
+                                    ? "Turn this on to filter windows by typing. Turns off Vim navigation and home row keys."
+                                    : "Filter windows by typing while the picker is open. When disabled, ⌘W/⌘Q/⌘H work directly.",
+                                  $prefs.typeToFilter)
+                        Divider().opacity(0.4)
+                        toggleRow("Static order",
+                                  "Keep windows in the same spot every time instead of sorting by recent use.",
+                                  $prefs.staticOrder)
                         if prefs.staticOrder {
                             Divider().opacity(0.4)
                             appOrderList
                         }
                         Divider().opacity(0.4)
-                        row(title: "Hide minimized and hidden windows",
-                            detail: "Leave out windows that are minimized to the Dock or belong to hidden apps.") {
-                            Toggle("", isOn: $prefs.hideMinimizedWindows)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Only windows on the picker's display",
+                                  "List windows on the display the picker opens on (see Show picker on), not every display.",
+                                  $prefs.currentDisplayOnly)
                         Divider().opacity(0.4)
-                        row(title: "Show number key hints",
-                            detail: "Label the first nine windows with the 1-9 key that picks them.") {
-                            Toggle("", isOn: $prefs.showNumberKeyHints)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Move the cursor to the window",
+                                  "Jump the pointer to the chosen window when it sits on another display.",
+                                  $prefs.moveCursorToWindow)
                         Divider().opacity(0.4)
-                        row(title: "Include apps with no windows",
-                            detail: "Show running Dock apps that don't currently have any windows. Picking one activates the app.") {
-                            Toggle("", isOn: $prefs.includeWindowlessApps)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Hide minimized and hidden windows",
+                                  "Leave out windows that are minimized to the Dock or belong to hidden apps.",
+                                  $prefs.hideMinimizedWindows)
                         Divider().opacity(0.4)
-                        row(title: "Show hidden and minimized windows",
-                            detail: "Include windows whose apps are hidden or whose windows are minimized.") {
-                            Toggle("", isOn: $prefs.showHiddenAndMinimizedWindows)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show key hints",
+                                  "Label the first nine windows with the key that picks them.",
+                                  $prefs.showNumberKeyHints)
                         Divider().opacity(0.4)
-                        row(title: "Show thumbnails",
-                            detail: "Capture window previews. Turn off to run without Screen Recording.") {
-                            Toggle("", isOn: $prefs.showThumbnails)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Include apps with no windows",
+                                  "Show running Dock apps that don't currently have any windows. Picking one activates the app.",
+                                  $prefs.includeWindowlessApps)
                         Divider().opacity(0.4)
-                        row(title: "Show stoplights on thumbnails",
-                            detail: "Red/yellow/green buttons to close, minimize, or zoom each window. ⌘W closes the selected window either way.") {
-                            Toggle("", isOn: $prefs.showStoplights)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show thumbnails",
+                                  "Capture window previews. Turn off to run without Screen Recording.",
+                                  $prefs.showThumbnails)
                         Divider().opacity(0.4)
-                        row(title: "Show hint strip",
-                            detail: "Keyboard shortcut hints at the bottom of the picker.") {
-                            Toggle("", isOn: $prefs.showHintStrip)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show stoplights on thumbnails",
+                                  "Red/yellow/green buttons to close, minimize, or zoom each window. ⌘W closes the selected window either way.",
+                                  $prefs.showStoplights)
                         Divider().opacity(0.4)
-                        row(title: "Show window title first",
-                            detail: "Put the window title ahead of the app name in each tile and row.") {
-                            Toggle("", isOn: $prefs.showTitleFirst)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show hint strip",
+                                  "Keyboard shortcut hints at the bottom of the picker.",
+                                  $prefs.showHintStrip)
+                        Divider().opacity(0.4)
+                        toggleRow("Show window count",
+                                  "The number of windows in the top right of the picker.",
+                                  $prefs.showWindowCount)
+                        Divider().opacity(0.4)
+                        toggleRow("Show window title first",
+                                  "Put the window title ahead of the app name in each tile and row.",
+                                  $prefs.showTitleFirst)
                     }
                 }
 
                 section("Vertical mode") {
                     VStack(spacing: 0) {
-                        row(title: "Vertical list",
-                            detail: "One window per row instead of a grid.") {
-                            Toggle("", isOn: $prefs.verticalList)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Vertical list",
+                                  "One window per row instead of a grid.",
+                                  $prefs.verticalList)
                         Divider().opacity(0.4)
-                        row(title: "Show top header",
-                            detail: "Filter text and window count at the top of the picker.") {
-                            Toggle("", isOn: $prefs.verticalShowHeader)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show top header",
+                                  "Filter text and window count at the top of the picker.",
+                                  $prefs.verticalShowHeader)
                         Divider().opacity(0.4)
-                        row(title: "Show preview",
-                            detail: "Window thumbnail at the trailing edge of each row.") {
-                            Toggle("", isOn: $prefs.verticalShowPreview)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show preview",
+                                  "Window thumbnail at the trailing edge of each row.",
+                                  $prefs.verticalShowPreview)
                         Divider().opacity(0.4)
-                        row(title: "Show stoplights",
-                            detail: "Close/minimize/zoom buttons inside each row.") {
-                            Toggle("", isOn: $prefs.verticalShowStoplights)
-                                .labelsHidden().toggleStyle(.switch)
-                                .tint(prefs.accent.color)
-                        }
+                        toggleRow("Show stoplights",
+                                  "Close/minimize/zoom buttons inside each row.",
+                                  $prefs.verticalShowStoplights)
                     }
                 }
 
@@ -403,8 +305,27 @@ struct SettingsView: View {
                                 .tint(prefs.accent.color)
                         }
                         Divider().opacity(0.4)
+                        row(title: "Rows",
+                            detail: "Rows visible at once in the list view. \(prefs.maxListRows)") {
+                            Slider(value: Binding(
+                                get: { Double(prefs.maxListRows) },
+                                set: { prefs.maxListRows = Int($0.rounded()) }
+                            ), in: 4...20, step: 1)
+                                .frame(width: 140)
+                                .tint(prefs.accent.color)
+                        }
+                        Divider().opacity(0.4)
+                        row(title: "Panel width",
+                            detail: panelWidthDetail) {
+                            Slider(value: $prefs.panelWidthScale,
+                                   in: SwitchPreferences.minPanelWidthScale...SwitchPreferences.maxPanelWidthScale,
+                                   step: 0.05)
+                                .frame(width: 140)
+                                .tint(prefs.accent.color)
+                        }
+                        Divider().opacity(0.4)
                         row(title: "Thumbnail size",
-                            detail: "Overall picker size. \(Int(prefs.thumbnailHeight))pt") {
+                            detail: "Height of each window preview. \(Int(prefs.thumbnailHeight))pt") {
                             Slider(value: $prefs.thumbnailHeight, in: 80...300, step: 5)
                                 .frame(width: 140)
                                 .tint(prefs.accent.color)
@@ -418,7 +339,7 @@ struct SettingsView: View {
                         }
                         Divider().opacity(0.4)
                         row(title: "Reset sizing",
-                            detail: "Restore columns, thumbnail size, and app icon size.") {
+                            detail: "Restore panel width, columns, rows, thumbnail size, and app icon size.") {
                             Button("Reset") {
                                 resetSizing()
                             }
@@ -432,6 +353,10 @@ struct SettingsView: View {
                 crossSpaceSection
 
                 blacklistSection
+
+                passthroughSection
+
+                titleExclusionSection
             }
             .padding(24)
         }
@@ -456,11 +381,20 @@ struct SettingsView: View {
                         .tint(prefs.accent.color)
                 }
                 Divider().opacity(0.4)
-                row(title: "Reverse with Shift tap",
-                    detail: "While holding the hotkey, tap Shift to step backward. ⇧-Tab still works too.") {
-                    Toggle("", isOn: $prefs.shiftTapReverses)
-                        .labelsHidden().toggleStyle(.switch)
-                        .tint(prefs.accent.color)
+                toggleRow("Reverse with Shift tap",
+                          "While holding the hotkey, tap Shift to step backward. ⇧-Tab still works too.",
+                          $prefs.shiftTapReverses)
+                Divider().opacity(0.4)
+                row(title: "Show picker on",
+                    detail: "Mouse: the screen under the cursor. Active: the screen with the focused window. Primary: your main display.") {
+                    Picker("", selection: $prefs.pickerDisplay) {
+                        ForEach(SwitchPreferences.PickerDisplay.allCases) { d in
+                            Text(d.label).tag(d)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 190)
                 }
             }
         }
@@ -496,47 +430,32 @@ struct SettingsView: View {
     private var crossSpaceSection: some View {
         section("Cross-Space") {
             VStack(spacing: 0) {
-                row(title: "Show cross-Space windows",
-                    detail: "Include windows on other Spaces. Picking one moves it to your current Space.") {
-                    Toggle("", isOn: $prefs.showCrossSpace)
-                        .labelsHidden().toggleStyle(.switch)
-                        .tint(prefs.accent.color)
-                }
+                toggleRow("Show cross-Space windows",
+                          "Include windows on other Spaces. Picking one takes you to it.",
+                          $prefs.showCrossSpace)
                 Divider().opacity(0.4)
-                row(title: "Mix by recent use",
-                    detail: "Sort all windows together by recency instead of grouping by Space.") {
-                    Toggle("", isOn: $prefs.mruMixSpaces)
-                        .labelsHidden().toggleStyle(.switch)
-                        .tint(prefs.accent.color)
-                }
+                toggleRow("Mix by recent use",
+                          "Sort all windows together by recency instead of grouping by Space.",
+                          $prefs.mruMixSpaces)
             }
         }
+    }
+
+    private var panelWidthDetail: String {
+        let base = prefs.verticalList
+            ? SwitchPreferences.defaultListPanelWidth
+            : SwitchPreferences.defaultGridPanelWidth
+        let points = Int((base * prefs.panelWidthScale).rounded())
+        let layout = prefs.verticalList ? "list" : "grid"
+        return "Width of the picker, independent of thumbnail size. \(points)pt (\(layout))"
     }
 
     private func resetSizing() {
         prefs.gridColumns = SwitchPreferences.defaultGridColumns
+        prefs.maxListRows = SwitchPreferences.defaultMaxListRows
+        prefs.panelWidthScale = SwitchPreferences.defaultPanelWidthScale
         prefs.thumbnailHeight = SwitchPreferences.defaultThumbnailHeight
         prefs.appIconSize = SwitchPreferences.defaultAppIconSize
-    }
-
-    private var stickyToggleRow: some View {
-        HStack(spacing: 12) {
-            Text("Sticky toggle")
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 100, alignment: .leading)
-            KeyRecorderField(
-                initialBinding: model.stickyToggle ?? HotkeyBinding(keyCode: 0, modifiersRaw: 0),
-                onCapture: { b in applyHotkey(b, replacing: model.stickyToggle) { model.updateStickyToggle($0) } },
-                accent: prefs.accent.color,
-                placeholder: "Not set"
-            )
-            .frame(width: 180, height: 28)
-            if model.stickyToggle != nil {
-                Button("Clear") { model.updateStickyToggle(nil) }
-                    .controlSize(.small)
-            }
-            Spacer()
-        }
     }
 
     private var appOrderList: some View {
@@ -605,21 +524,87 @@ struct SettingsView: View {
         return nil
     }
 
-    private var blacklistSection: some View {
-        section("Excluded apps") {
+    @State private var newTitleExclusion = ""
+
+    private var titleExclusionSection: some View {
+        section("Excluded titles") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Windows from these apps won't appear in the picker.")
+                Text("Windows whose title contains any of these won't appear in the picker.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                if prefs.blacklist.isEmpty {
+                if prefs.titleExclusions.isEmpty {
                     Text("Nothing excluded.")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .padding(.vertical, 4)
                 } else {
                     VStack(spacing: 4) {
-                        ForEach(Array(prefs.blacklist).sorted(by: { sortKey($0) < sortKey($1) }), id: \.self) { bid in
-                            blacklistRow(bundleID: bid)
+                        ForEach(prefs.titleExclusions, id: \.self) { text in
+                            HStack(spacing: 8) {
+                                Text(text).font(.system(size: 12))
+                                Spacer()
+                                Button {
+                                    prefs.titleExclusions.removeAll { $0 == text }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 6)
+                        }
+                    }
+                }
+                TextField("Add title text, press Return", text: $newTitleExclusion)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+                    .frame(width: 260)
+                    .onSubmit {
+                        let t = newTitleExclusion.trimmingCharacters(in: .whitespaces)
+                        guard !t.isEmpty, !prefs.titleExclusions.contains(t) else { return }
+                        prefs.titleExclusions.append(t)
+                        newTitleExclusion = ""
+                    }
+            }
+            .padding(14)
+            .background(rowBackground)
+        }
+    }
+
+    private var blacklistSection: some View {
+        appListSection(
+            "Excluded apps",
+            caption: "Windows from these apps won't appear in the picker.",
+            emptyText: "Nothing excluded.",
+            apps: $prefs.blacklist
+        )
+    }
+
+    private var passthroughSection: some View {
+        appListSection(
+            "Pass-through apps",
+            caption: "Switch's hotkeys go to these apps while they're frontmost, e.g. a virtual machine or remote desktop.",
+            emptyText: "No pass-through apps.",
+            apps: $prefs.passthroughApps
+        )
+    }
+
+    private func appListSection(_ title: String, caption: String, emptyText: String, apps: Binding<Set<String>>) -> some View {
+        section(title) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(caption)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                if apps.wrappedValue.isEmpty {
+                    Text(emptyText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(Array(apps.wrappedValue).sorted(by: { sortKey($0) < sortKey($1) }), id: \.self) { bid in
+                            appRow(bundleID: bid) { apps.wrappedValue.remove(bid) }
                         }
                     }
                 }
@@ -627,7 +612,7 @@ struct SettingsView: View {
                     ForEach(addableApps(), id: \.bundleIdentifier) { app in
                         Button {
                             if let bid = app.bundleIdentifier {
-                                prefs.blacklist.insert(bid)
+                                apps.wrappedValue.insert(bid)
                             }
                         } label: {
                             if let icon = app.icon {
@@ -648,7 +633,7 @@ struct SettingsView: View {
         }
     }
 
-    private func blacklistRow(bundleID: String) -> some View {
+    private func appRow(bundleID: String, onRemove: @escaping () -> Void) -> some View {
         let (name, icon) = appInfo(for: bundleID)
         return HStack(spacing: 8) {
             if let icon {
@@ -664,9 +649,7 @@ struct SettingsView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button {
-                prefs.blacklist.remove(bundleID)
-            } label: {
+            Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
@@ -717,6 +700,23 @@ struct SettingsView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("Accent shows up in the selection highlight and across this Settings window.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                    .background(rowBackground)
+                }
+
+                section("Theme") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("", selection: $prefs.appearance) {
+                            ForEach(SwitchPreferences.Appearance.allCases) { a in
+                                Text(a.label).tag(a)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Text("Light or dark for the picker and this window, or follow the system.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -793,17 +793,24 @@ struct SettingsView: View {
         .background(rowBackground)
     }
 
-    private func hotkeyRow(label: String, binding: HotkeyBinding?, alternate: HotkeyBinding?, detail: String? = nil,
-                           onCapture: @escaping (HotkeyBinding?) -> Void,
-                           onAlternateCapture: @escaping (HotkeyBinding?) -> Void) -> some View {
+    private func toggleRow(_ title: String, _ detail: String, _ isOn: Binding<Bool>) -> some View {
+        row(title: title, detail: detail) {
+            Toggle("", isOn: isOn)
+                .labelsHidden().toggleStyle(.switch)
+                .tint(prefs.accent.color)
+        }
+    }
+
+    private func hotkeyRow(_ label: String, rows: [(String, HotkeyConfig.Slot)], detail: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 12) {
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 100, alignment: .leading)
                 VStack(alignment: .leading, spacing: 6) {
-                    hotkeyBindingRow(label: "Primary", binding: binding, onCapture: onCapture)
-                    hotkeyBindingRow(label: "Alternate", binding: alternate, onCapture: onAlternateCapture)
+                    ForEach(rows, id: \.1) { sub in
+                        hotkeyBindingRow(label: sub.0, slot: sub.1)
+                    }
                 }
                 Spacer()
             }
@@ -816,21 +823,21 @@ struct SettingsView: View {
         }
     }
 
-    private func hotkeyBindingRow(label: String, binding: HotkeyBinding?, onCapture: @escaping (HotkeyBinding?) -> Void) -> some View {
+    private func hotkeyBindingRow(label: String, slot: HotkeyConfig.Slot) -> some View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-                .frame(width: 54, alignment: .leading)
+                .frame(width: 76, alignment: .leading)
             KeyRecorderField(
-                initialBinding: binding ?? HotkeyBinding(keyCode: 0, modifiersRaw: 0),
-                onCapture: { onCapture($0) },
+                initialBinding: model.bindings[slot] ?? HotkeyBinding(keyCode: 0, modifiersRaw: 0),
+                onCapture: { applyHotkey($0, to: slot) },
                 accent: prefs.accent.color,
                 placeholder: "Not set"
             )
             .frame(width: 150, height: 28)
-            if binding != nil {
-                Button { onCapture(nil) } label: {
+            if model.bindings[slot] != nil {
+                Button { applyHotkey(nil, to: slot) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }
@@ -860,29 +867,21 @@ struct SettingsView: View {
         .help(choice.label)
     }
 
-    private func applyHotkey(_ b: HotkeyBinding?, replacing old: HotkeyBinding?, save: (HotkeyBinding?) -> Void) {
+    private func applyHotkey(_ b: HotkeyBinding?, to slot: HotkeyConfig.Slot) {
         guard let b else {
             rejectMessage = nil
-            save(nil)
+            model.update(slot, nil)
             return
         }
         if let msg = HotkeyValidator.reject(keyCode: b.keyCode, flags: b.cgFlags) {
             rejectMessage = msg
-        } else if configuredHotkeys.contains(where: { $0 != old && $0.conflicts(with: b) }) {
+        } else if model.bindings.contains(where: { $0.key != slot && $0.value.conflicts(with: b) }) {
             rejectMessage = "That shortcut is already assigned."
         } else {
             rejectMessage = nil
-            save(b)
+            model.update(slot, b)
         }
     }
-
-    private var configuredHotkeys: [HotkeyBinding] {
-        [model.allWindows, model.allWindowsAlternate,
-         model.currentApp, model.currentAppAlternate,
-         model.spaces, model.spacesAlternate,
-         model.stickyToggle].compactMap { $0 }
-    }
-
 }
 
 struct PermissionsTabView: View {

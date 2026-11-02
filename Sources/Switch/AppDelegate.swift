@@ -55,18 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = SwitcherWindow(model: model)
         let hotkey = HotkeyManager()
 
-        hotkey.onArm = { [weak self] mode in
-            model.arm(mode)
+        // Most tap callbacks force a pending picker onto screen before acting.
+        let present: () -> Void = { [weak self] in self?.presentNowIfPending(window: window) }
+
+        hotkey.onArm = { [weak self] style in
+            model.arm(style)
             self?.schedulePresent(window: window)
         }
-        hotkey.onAdvance = { [weak self] reverse in
-            self?.presentNowIfPending(window: window)
+        hotkey.onAdvance = { reverse in
+            present()
             model.advance(reverse: reverse)
         }
         // Tap-originated commits already cleared armed on the tap thread; clearing again here races a fresh arm.
-        hotkey.onCommit = { [weak self, weak model, weak window] in
+        hotkey.onCommit = { [weak self, weak model, weak window] quick in
             self?.cancelPendingPresent()
-            model?.commit()
+            model?.commit(stickyQuickTap: quick)
             window?.dismiss()
         }
         model.commitAndDismiss = { [weak self, weak model, weak window] in
@@ -87,38 +90,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window?.dismiss()
         }
         model.cancelAndDismiss = cancelAndDismiss
-        hotkey.onCloseSelected = { [weak self] in
-            self?.presentNowIfPending(window: window)
-            model.closeSelected()
-        }
-        hotkey.onCloseSelectedApp = { [weak self] in
-            self?.presentNowIfPending(window: window)
-            model.closeSelectedApp()
-        }
-        hotkey.onHideSelected = { [weak self] in
-            self?.presentNowIfPending(window: window)
-            model.hideSelected()
-        }
-        hotkey.onNavigate = { [weak self] direction in
-            self?.presentNowIfPending(window: window)
-            model.navigate(direction: direction)
-        }
-        hotkey.onPickIndex = { [weak self] index in
-            self?.presentNowIfPending(window: window)
-            model.pickIndex(index)
-        }
-        hotkey.onPickSelectOnly = { [weak self] index in
-            self?.presentNowIfPending(window: window)
-            model.selectIndex(index)
-        }
-        hotkey.onFilterAppend = { [weak self] c in
-            self?.presentNowIfPending(window: window)
-            model.appendFilter(c)
-        }
-        hotkey.onFilterBackspace = { [weak self] in
-            self?.presentNowIfPending(window: window)
-            model.backspaceFilter()
-        }
+        hotkey.onCloseSelected = { present(); model.closeSelected() }
+        hotkey.onCloseSelectedApp = { present(); model.closeSelectedApp() }
+        hotkey.onHideSelected = { present(); model.hideSelected() }
+        hotkey.onNavigate = { present(); model.navigate(direction: $0) }
+        hotkey.onPickIndex = { present(); model.pickIndex($0) }
+        hotkey.onPickSelectOnly = { present(); model.selectIndex($0) }
+        hotkey.onFilterAppend = { present(); model.appendFilter($0) }
+        hotkey.onFilterBackspace = { present(); model.backspaceFilter() }
         hotkey.onStickyToggle = {
             SwitchPreferences.shared.stickyMode.toggle()
         }
@@ -126,11 +105,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { SettingsWindow.shared.show() }
         }
 
+        SwitchPreferences.shared.$appearance
+            .sink { NSApp.appearance = $0.nsAppearance }
+            .store(in: &cancellables)
         SwitchPreferences.shared.$verticalList
             .dropFirst()
             .sink { [weak window] _ in window?.applyContentSize() }
             .store(in: &cancellables)
         SwitchPreferences.shared.$thumbnailHeight
+            .dropFirst()
+            .sink { [weak window] _ in window?.applyContentSize() }
+            .store(in: &cancellables)
+        SwitchPreferences.shared.$maxListRows
+            .dropFirst()
+            .sink { [weak window] _ in window?.applyContentSize() }
+            .store(in: &cancellables)
+        SwitchPreferences.shared.$panelWidthScale
             .dropFirst()
             .sink { [weak window] _ in window?.applyContentSize() }
             .store(in: &cancellables)
@@ -244,8 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var requiredPermissionsGranted: Bool {
-        let thumbnailsEnabled = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
-            ?? SwitchPreferences.defaultShowThumbnails
+        let thumbnailsEnabled = (UserDefaults.standard.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? SwitchPreferences.defaultShowThumbnails
         let screenCaptureOK = !thumbnailsEnabled || CGPreflightScreenCaptureAccess()
         return AXIsProcessTrusted() && screenCaptureOK
     }
@@ -404,9 +393,7 @@ final class SwitcherWindow: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         animationBehavior = SwitchPreferences.shared.disableAnimations ? .none : .default
 
-        let cursor = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { NSMouseInRect(cursor, $0.frame, false) })
-            ?? NSScreen.main
+        let screen = Self.pickerScreen()
         applyContentSize(for: screen)
         if let screen {
             let visible = screen.visibleFrame
@@ -421,6 +408,20 @@ final class SwitcherWindow: NSPanel {
     func dismiss() {
         orderOut(nil)
     }
+
+    static func pickerScreen() -> NSScreen? {
+        switch SwitchPreferences.shared.pickerDisplay {
+        case .mouse:
+            let cursor = NSEvent.mouseLocation
+            return NSScreen.screens.first(where: { NSMouseInRect(cursor, $0.frame, false) })
+                ?? NSScreen.main
+        case .active:
+            // NSScreen.main is the screen holding the key window, not the primary display.
+            return NSScreen.main
+        case .primary:
+            return NSScreen.screens.first
+        }
+    }
 }
 
 private enum SwitcherPanelSize {
@@ -430,47 +431,40 @@ private enum SwitcherPanelSize {
             ?? SwitchPreferences.defaultVerticalList
         let thumb = CGFloat((defaults.object(forKey: SwitchPreferences.thumbnailHeightKey) as? Double) ?? SwitchPreferences.defaultThumbnailHeight)
         let scale = thumb / CGFloat(SwitchPreferences.defaultThumbnailHeight)
+        let widthScale = CGFloat(SwitchPreferences.clampedPanelWidthScale(
+            defaults.object(forKey: SwitchPreferences.panelWidthScaleKey) as? Double
+        ))
         let count = max(itemCount, 1)
-        let size: NSSize
-        switch (mode, isList) {
-        case (.spaces, _):
-            size = listSize(defaults: defaults, count: count, scale: scale)
-        case (.allWindows, true):
-            size = NSSize(width: 520 * scale, height: 560 * scale)
-        case (.allWindows, false):
-            size = NSSize(width: 880 * scale, height: 560 * scale)
-        case (.currentApp, true):
-            size = listSize(defaults: defaults, count: count, scale: scale)
-        case (.currentApp, false):
-            size = gridSize(defaults: defaults, count: count, thumb: thumb, scale: scale)
-        }
+        // Every mode sizes to the window count; a fixed panel leaves rows of empty backdrop (#134).
+        let size = (mode == .spaces || isList)
+            ? listSize(defaults: defaults, count: count, widthScale: widthScale, screen: screen)
+            : gridSize(defaults: defaults, count: count, thumb: thumb, scale: scale, widthScale: widthScale)
         return fit(size, on: screen)
     }
 
-    private static func listSize(defaults: UserDefaults, count: Int, scale: CGFloat) -> NSSize {
-        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool)
-            ?? SwitchPreferences.defaultShowHintStrip
-        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
-            ?? SwitchPreferences.defaultShowThumbnails
-        let showPreview = ((defaults.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool)
-            ?? SwitchPreferences.defaultVerticalShowPreview) && showThumbs
+    private static func listSize(defaults: UserDefaults, count: Int, widthScale: CGFloat, screen: NSScreen?) -> NSSize {
+        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? SwitchPreferences.defaultShowHintStrip
+        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? SwitchPreferences.defaultShowThumbnails
+        let showPreview = ((defaults.object(forKey: SwitchPreferences.verticalShowPreviewKey) as? Bool) ?? SwitchPreferences.defaultVerticalShowPreview) && showThumbs
         let hintHeight: CGFloat = showHints ? 38 : 0
         let rowHeight: CGFloat = showPreview ? 62 : 48
-        let visibleRows = min(count, 8)
+        let chrome = 26 + hintHeight + 20
+        let maxRows = (defaults.object(forKey: SwitchPreferences.maxListRowsKey) as? Int) ?? SwitchPreferences.defaultMaxListRows
+        // Whole rows only: a screen-capped height leaves a clipped row at the bottom (#132).
+        let fitting = screen.map { Int(($0.visibleFrame.height * 0.92 - chrome + 4) / (rowHeight + 4)) } ?? maxRows
+        let visibleRows = max(1, min(count, maxRows, fitting))
         let rowGaps = CGFloat(max(visibleRows - 1, 0)) * 4
-        let height = 26 + CGFloat(visibleRows) * rowHeight + rowGaps + hintHeight + 20
-        return NSSize(width: 520 * scale, height: min(560 * scale, max(260, height)))
+        let height = chrome + CGFloat(visibleRows) * rowHeight + rowGaps
+        return NSSize(width: CGFloat(SwitchPreferences.defaultListPanelWidth) * widthScale, height: max(260, height))
     }
 
-    private static func gridSize(defaults: UserDefaults, count: Int, thumb: CGFloat, scale: CGFloat) -> NSSize {
-        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool)
-            ?? SwitchPreferences.defaultShowHintStrip
-        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool)
-            ?? SwitchPreferences.defaultShowThumbnails
+    private static func gridSize(defaults: UserDefaults, count: Int, thumb: CGFloat, scale: CGFloat, widthScale: CGFloat) -> NSSize {
+        let showHints = (defaults.object(forKey: SwitchPreferences.showHintStripKey) as? Bool) ?? SwitchPreferences.defaultShowHintStrip
+        let showThumbs = (defaults.object(forKey: SwitchPreferences.showThumbnailsKey) as? Bool) ?? SwitchPreferences.defaultShowThumbnails
         let tileThumb: CGFloat = showThumbs ? thumb : SwitchPreferences.compactThumbnailHeight
         let configuredColumns = (defaults.object(forKey: SwitchPreferences.gridColumnsKey) as? Int) ?? SwitchPreferences.defaultGridColumns
         let columns = min(max(configuredColumns, 1), max(count, 3))
-        let baseWidth: CGFloat = 880 * scale
+        let baseWidth: CGFloat = CGFloat(SwitchPreferences.defaultGridPanelWidth) * widthScale
         let horizontalPadding: CGFloat = 44
         let columnSpacing: CGFloat = 14
         let usable = baseWidth - horizontalPadding - CGFloat(max(configuredColumns - 1, 0)) * columnSpacing
